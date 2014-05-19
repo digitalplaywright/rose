@@ -8,23 +8,15 @@ use strict;
 ###############################################################################################################################
 
 my $dry_run = 0;        # Set true if you only want to see what would have been done.
-my $dropdb = 1;         # Set true to try to drop each database before the test runs (tests are skipped if a database exists).
-<<<<<<< HEAD
-my $max_pairs = 20;     # Maximum number of specimen pairs pairs to run, selected at random.
-my $per_program = 1;    # If true, select $max_pairs on a per program basis rather than over all.
-my $same_program = 1;   # If true, then pairs of specimens must be the same program (e.g., both "egrep")
-my $symmetric = 1;      # If true, avoid generating pair (a, b) if pair (b, a) was selected.
-my $dbprefix = "example10_";   # Prefix to add to each database name
-=======
+my $dropdb = 0;         # Set true to try to drop each database before the test runs (tests are skipped if a database exists).
 my $max_pairs = undef;  # Maximum number of specimen pairs pairs to run, selected at random (or all of them if undefined)
 my $per_program = 0;    # If true, select $max_pairs on a per program basis rather than over all.
 my $same_program = 1;   # If true, then pairs of specimens must be the same program (e.g., both "egrep")
 my $symmetric = 1;      # If true, avoid generating pair (a, b) if pair (b, a) was selected.
-my $dbprefix = "as";    # Prefix to add to each database name
->>>>>>> b2197eaa90e31bc057b41c066b118716b0b65d87
+my $dbprefix = "trainingex8_";    # Prefix to add to each database name
 
 # Location of the training files. These must follow a naming convention described in the load_specimens function.
-my $training_dir = "$ENV{HOME}/binary-runs/suspects-and-victims-subset/test-set/";
+my $training_dir = "$ENV{HOME}/binary-runs/suspects-and-victims-subset/training-set/";
 
 # Predicate that defines how to generate pairs.  A pair is created if both $a and $b have the same program name and
 # this predicate returns true.  The predicate is called with two specimen arguments. Each specimen is a hash reference
@@ -192,13 +184,11 @@ sub select_random_pairs {
 # Generate a database name for a pair of specimens.
 sub database_name {
     my($a, $b) = @_;
-<<<<<<< HEAD
-    if($same_program){
-      $dbprefix . join "_", $a->{program}, substr($a->{compiler},0,1) . $a->{optim}, substr($b->{compiler},0,1) . $b->{optim};
-    }else{
-      $dbprefix . join "_", $a->{program}, $a->{compiler}, $a->{optim}, $b->{program}, $b->{compiler}, $b->{optim};
-    }
-=======
+    #if($same_program){
+    #  $dbprefix . join "_", $a->{program}, substr($a->{compiler},0,1) . $a->{optim}, substr($b->{compiler},0,1) . $b->{optim};
+    #}else{
+    #  $dbprefix . join "_", $a->{program}, $a->{compiler}, $a->{optim}, $b->{program}, $b->{compiler}, $b->{optim};
+    #}
     my @name = $dbprefix;
     my $normalize = sub {
 	local($_) = @_;
@@ -212,7 +202,6 @@ sub database_name {
     push @name, &{$normalize}($a->{comp} . $a->{optim});
     push @name, &{$normalize}($b->{comp} . $b->{optim});
     return lc(join "_", @name);
->>>>>>> b2197eaa90e31bc057b41c066b118716b0b65d87
 }
 
 
@@ -325,9 +314,9 @@ sub example8 {
     my($specimens) = @_;
     print "\nexample 8:
         We need rules for the testing harness to get 10 pairs uniformly at random from:
-            X={O0,O1,O2,O3,Os,S3} C={gcc} where S3 is stunnix with gcc O3 as backend.\n\n";
-    my @cx = (['stunnix', '3'], cross ['gcc'], [qw/0 1 2 3 s/]);
-    my @constraints = select_random 20, cross \@cx, \@cx;
+            X={O0,O1,O2,O3,Os,S3} C={gcc}.\n\n";
+    my @cx = (cross ['llvm'], [qw/0 1 2 3 s/]);
+    my @constraints = select_random 30, cross \@cx, \@cx;
     return select_tuples $specimens, ['compiler','optim'], @constraints;
 }
 
@@ -350,13 +339,8 @@ sub example10 {
     print "\nexample 10:
         We need rules for the testing harness to get 10 pairs uniformly at random from:
             C={gcc,icc,llvm} and X={O3}\n\n";
-<<<<<<< HEAD
-    my @cx = cross [qw/gcc icc llvm/], ['0','1','2','3','s'];
-    my @constraints = select_random 6, eliminate_diagonal cross \@cx, \@cx;
-=======
     my @cx = cross [qw/gcc icc llvm/], ['3'];
-    my @constraints = select_random 10, eliminate_diagonal cross \@cx, \@cx;
->>>>>>> b2197eaa90e31bc057b41c066b118716b0b65d87
+    my @constraints = select_random 6, eliminate_diagonal cross \@cx, \@cx;
     return select_tuples $specimens, ['compiler', 'optim'], @constraints;
 }
 
@@ -367,9 +351,31 @@ sub example11 {
         We need rules for the testing harness to get 10 pairs uniformly at random from:
             C={gcc,icc,llvm} and X={O0,O1,O2,O3,Os} and stunnix compiled with O3\n\n";
     my @cx = cross [qw/gcc icc llvm/], [qw/0 1 2 3 s/];
-    my @constraints = select_random 10, cross \@cx, \@cx;
+    my @constraints = select_random 30, cross \@cx, \@cx;
     return select_tuples $specimens, ['compiler', 'optim'], @constraints;
 }
+
+sub example12 {
+    my($specimens) = @_;
+    print "\nexample 9:
+        We need rules for the testing harness to get  pairs uniformly at random from:
+            C={stunnix,gcc}, and X={O0,O1,O2,O3,Os} where the compiler is different,
+            but compiler flag is the same \n\n";
+    my @constraints1 = select_random 1, cross [['stunnix', '0']], [['gcc', '0']];
+    my @constraints2 = select_random 1, cross [['stunnix', '1']], [['gcc', '1']];
+    my @constraints3 = select_random 1, cross [['stunnix', '2']], [['gcc', '2']];
+    my @constraints4 = select_random 1, cross [['stunnix', '3']], [['gcc', '3']];
+    my @constraints5 = select_random 1, cross [['stunnix', 's']], [['gcc', 's']];
+
+
+    return (select_tuples($specimens, ['compiler', 'optim'], @constraints1),
+            select_tuples($specimens, ['compiler', 'optim'], @constraints2),
+            select_tuples($specimens, ['compiler', 'optim'], @constraints3),
+            select_tuples($specimens, ['compiler', 'optim'], @constraints4),
+            select_tuples($specimens, ['compiler', 'optim'], @constraints5));
+}
+
+
 
 ###############################################################################################################################
 ###############################################################################################################################
@@ -378,7 +384,7 @@ sub example11 {
 ###############################################################################################################################
 
 # Generate a list of pairs over which to run
-my @pairs = select_random_pairs $max_pairs, example10 \@specimens;
+my @pairs = select_random_pairs $max_pairs, example8 \@specimens;
 
 # Run the analysis for each pair
 for my $pair (@pairs) {
