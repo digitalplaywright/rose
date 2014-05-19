@@ -559,13 +559,21 @@ int main(int argc, char *argv[])
       "(db_name, program_name, ncalls, num_output_call_vecs ) "
       " values (?, ?, ?, ?)");
 
-  r_transaction->execute("drop table IF EXISTS ougroup_nelem;");
+  r_transaction->execute("drop table IF EXISTS ogroup_nelem;");
   r_transaction->execute("create table ogroup_nelem(db_name text, program_name text, noutputs  integer, num_ogroups integer);");
   SqlDatabase::StatementPtr noutputs_stmt = r_transaction->statement("insert into ogroup_nelem"
       // 0        1         2           3          4
       "(db_name, program_name, noutputs, num_ogroups ) "
       " values (?, ?, ?, ?)");
 
+
+  r_transaction->execute("drop table IF EXISTS tmp_aggregate_clone_value;");
+  r_transaction->execute("create table tmp_aggregate_clone_value(func1_id integer, func2_id integer, ground_truth integer, suspect integer);");
+ 
+  SqlDatabase::StatementPtr aggr_stmt = r_transaction->statement("insert into tmp_aggregate_clone_value"
+      // 0        1         2           3          4
+      "(func1_id, func2_id, ground_truth, suspect ) "
+      " values (?, ?, ?, ?)");
 
 
 
@@ -664,6 +672,31 @@ int main(int argc, char *argv[])
            noutputs_stmt->execute();
       }
 
+      transaction->execute("drop table if exists tmp_aggregate_clone_value; create table tmp_aggregate_clone_value as "
+       " (select fr.func1_id, fr.func2_id, 1 as ground_truth, 1 as suspect  from fr_true_positives as fr join semantic_funcsim as sim on fr.func1_id=sim.func1_id and fr.func2_id=sim.func2_id) "
+       " union (select fr.func1_id, fr.func2_id, 1 as ground_truth, 0 as suspect  from fr_false_negatives as fr join semantic_funcsim as sim on fr.func1_id=sim.func1_id and fr.func2_id=sim.func2_id) "
+       " union (select fr.func1_id, fr.func2_id, 0 as ground_truth, 0 as suspect  from fr_true_negatives as fr join semantic_funcsim as sim on fr.func1_id=sim.func1_id and fr.func2_id=sim.func2_id) " 
+       " union (select fr.func1_id, fr.func2_id, 0 as ground_truth, 1 as suspect  from fr_false_positives as fr join semantic_funcsim as sim on fr.func1_id=sim.func1_id and fr.func2_id=sim.func2_id);");
+
+      SqlDatabase::StatementPtr it_aggr_stmt = transaction->statement(
+      "select func1_id, func2_id, ground_truth, suspect from tmp_aggregate_clone_value;"
+      );
+
+      for (SqlDatabase::Statement::iterator row=it_aggr_stmt->begin(); row!=it_aggr_stmt->end(); ++row) {
+           int func1_id = row.get<int>(0); 
+           int func2_id = row.get<int>(1);
+           bool ground_truth = row.get<int>(2);
+           bool suspect      = row.get<int>(3);
+ 
+           aggr_stmt->bind(0, func1_id);
+           aggr_stmt->bind(1, func2_id);
+           aggr_stmt->bind(2, ground_truth);
+           aggr_stmt->bind(3, suspect);
+           aggr_stmt->execute();
+      }
+
+
+
 
       transaction->commit();
 
@@ -697,6 +730,68 @@ int main(int argc, char *argv[])
     if(compute_semantic_distribution == true){
       compute_aggregate_statistics(bucket_size, increment, r_transaction);
     }
+
+  }
+
+  int generated_scores = 0;
+  std::string sampling_size = "500";
+
+
+  {
+	  r_transaction->execute("drop table IF EXISTS tmp_aggregate_clone_value_random_select_score;");
+	  r_transaction->execute("create table tmp_aggregate_clone_value_random_select_score("
+			  " score text, value double precision);"
+			  );
+
+	  SqlDatabase::StatementPtr score_stmt = r_transaction->statement("insert into tmp_aggregate_clone_value_random_select_score"
+			  "(score, value) values(?,?)"
+			  );
+
+
+
+
+
+	  while ( generated_scores < 100 ) {
+
+		  r_transaction->execute("drop table IF EXISTS tmp_aggregate_clone_value_random_selection; create table tmp_aggregate_clone_value_random_selection as (select ground_truth, suspect from tmp_aggregate_clone_value order by random() limit " 
+				  +sampling_size+");");
+
+
+		  int true_positives = r_transaction->statement("select COALESCE((select count(*) from tmp_aggregate_clone_value_random_selection where ground_truth=1 and suspect=1), 0);")->execute_int();
+		  int true_negatives = r_transaction->statement("select COALESCE((select count(*) from tmp_aggregate_clone_value_random_selection where ground_truth=0 and suspect=0), 0);")->execute_int();
+		  int false_positives = r_transaction->statement("select COALESCE((select count(*) from tmp_aggregate_clone_value_random_selection where ground_truth=0 and suspect=1), 0);")->execute_int();
+		  int false_negatives = r_transaction->statement("select COALESCE((select count(*) from tmp_aggregate_clone_value_random_selection where ground_truth=1 and suspect=0), 0);")->execute_int();
+
+		  if( (true_positives+false_positives > 0) && (true_positives + false_negatives > 0) )
+		  {
+			  double recall    = 100.0*true_positives / (true_positives + false_negatives);
+			  double precision = 100.0*true_positives / (true_positives +  false_positives);
+
+			  if( (precision+ recall) == 0) continue;
+
+			  double fscore    = 2*(precision*recall)/(precision+recall); 
+
+			  score_stmt->bind(0, "fscore");
+			  score_stmt->bind(1, fscore);
+			  score_stmt->execute();
+
+			  score_stmt->bind(0, "precision");
+			  score_stmt->bind(1, precision);
+			  score_stmt->execute();
+
+			  score_stmt->bind(0, "recall");
+			  score_stmt->bind(1, recall);
+			  score_stmt->execute();
+
+			  generated_scores++;        
+
+		  }else{
+			  //no score for this
+
+
+		  }
+
+	  }
 
   }
 
